@@ -7,6 +7,7 @@ from dicewars.client.game.board import Board
 from dicewars.client.game.area import Area
 
 from copy import deepcopy
+from typing import List, Tuple
 
 
 class AI:
@@ -30,7 +31,7 @@ class AI:
         self.players_order = players_order
         self.board = board
 
-        self.MAXN_MAX_DEPTH = 3
+        self.MAXN_MAX_DEPTH = 7
 
     def ai_turn(self, board, nb_moves_this_turn, nb_transfers_this_turn, nb_turns_this_game, time_left):
         """AI agent's turn (a single action)
@@ -47,35 +48,51 @@ class AI:
         """ 
 
         self.board = board
-        turn, src, tgt = self.get_best_move(board)
+        src, tgt = self.get_best_move(board)
 
-        if turn:
-            return BattleCommand(src, tgt) if type(turn) is BattleCommand else TransferCommand(src, tgt)
+        if src and tgt:
+            if board.get_area(tgt).get_owner_name() == self.player_name:
+                return TransferCommand(src, tgt)
+            else:
+                return BattleCommand(src, tgt)
 
         return EndTurnCommand()
 
-    def get_best_move(self, board: Board):
-        return self.maxn(board, 10)
+    def get_best_move(self, board: Board) -> Tuple[int, int]:
+        return self.maxn(board, self.MAXN_MAX_DEPTH)[1]
     
-    def maxn(self, board: Board, depth: int):
+    def maxn(self, board: Board, depth: int) -> Tuple[List[float], Tuple[int, int]]:
         moves = possible_attacks(board, self.player_name) + self.possible_transfers(board)
 
-        if not moves or not depth: # No moves possible
+        if not moves or not depth: # No moves possible or we reached max depth
             return self.evaluate_state(board), None
+
+        evaluation = self.evaluate_state(board)
 
         for src, tgt in moves:
             new_board = deepcopy(board)
-            self.simulate_move(new_board, src, tgt)
+            self.simulate_move(new_board, src.get_name(), tgt.get_name())
 
-            evaluation, _ = self.maxn(board, depth - 1)
+            new_evaluation, _ = self.maxn(new_board, depth - 1)
 
-    def simulate_move(self, board: Board, src, tgt):
-        pass
+            if new_evaluation[0] > evaluation[0]:
+                best_src = src.get_name()
+                best_tgt = tgt.get_name()
 
-    def evaluate_state(self, board: Board):
+        return new_evaluation, (best_src, best_tgt)
+
+    def simulate_move(self, board: Board, src_name: int, tgt_name: int) -> None:
+        src = board.get_area(src_name)
+        tgt = board.get_area(tgt_name)
+
+        tgt.set_dice(src.get_dice() - 1)
+        src.set_dice(1)
+        tgt.set_owner(src.get_owner_name())
+
+    def evaluate_state(self, board: Board) -> List[float]:
         return random.sample(range(0, 10), 4)
 
-    def possible_transfers(self, board: Board):
+    def possible_transfers(self, board: Board) -> Tuple[Area, Area]:
         for area in self.board.get_player_areas(self.player_name): 
             if not area.can_attack(): # can_attack means that area has more than one dice => can_attack <=> can_transfer
                 continue
