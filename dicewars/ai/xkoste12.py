@@ -28,12 +28,12 @@ class AI:
         """
 
         self.player_name = player_name
-        self.logger = logging.getLogger('AI')
+        self.logger = logging.getLogger('AI xkoste12')
         self.max_transfers = max_transfers
         self.players_order = players_order
         self.board = board
 
-        self.MAXN_MAX_DEPTH = 3
+        self.MAXN_MAX_DEPTH = 2
 
     def ai_turn(self, board, nb_moves_this_turn, nb_transfers_this_turn, nb_turns_this_game, time_left):
         """AI agent's turn (a single action)
@@ -49,36 +49,52 @@ class AI:
         BattleCommand() || EndTurnCommand() || TransferCommand()
         """ 
 
-        self.board = board
-        src, tgt = self.get_best_move(board, nb_transfers_this_turn)
+        self.logger.debug(f"It's my turn now. On turn: {nb_turns_this_game}.")
 
-        if src and tgt:
+        self.board = board
+        move = self.get_best_move(board, nb_transfers_this_turn)
+
+        if move:
+            src, tgt = move
+
             if board.get_area(tgt).get_owner_name() == self.player_name:
+                self.logger.debug(f"Best move in this position is a transfer from {src} to {tgt}.")
                 return TransferCommand(src, tgt)
             else:
+                self.logger.debug(f"Best move in this position is an attack from {src} to {tgt}.")
                 return BattleCommand(src, tgt)
 
+        self.logger.debug(f"There is no improving move in this position, ending my turn.")
         return EndTurnCommand()
 
     def get_best_move(self, board: Board, transfers: int) -> Tuple[int, int]:
+        self.logger.debug(f"Beginning a search for a best move.")
         return self.maxn(board, transfers, self.MAXN_MAX_DEPTH)[1]
     
     def maxn(self, board: Board, transfers: int, depth: int) -> Tuple[List[float], Tuple[int, int]]:
-        moves = possible_attacks(board, self.player_name)
+        self.logger.debug(f"Running MAX_N algorithm at depth {depth}")
+        moves = list(possible_attacks(board, self.player_name))
 
-        if transfers < self.max_transfers: # Consider transfers only if we are still allowed to do them
-            moves = moves + self.possible_transfers(board)
+        # COMMENTING THIS OUT FOR NOW, SELECTING MOVES RANDOMLY GENERATES A LOT OF TRANSFERS, WHICH IS UNSUITABLE FOR DEBUGGING
+        #if transfers < self.max_transfers: # Consider transfers only if we are still allowed to do them
+        #    moves = moves + list(self.possible_transfers(board))
 
-        # TODO: We have to check if the game is over or if we even have possible moves, I think
+        # TODO: We have to check if the game is over when simulating, I think, or maybe not, it seems it's working like this
 
-        if not moves or not depth: # We reached max depth or ran out of possible moves, return just the evaluation
+        if depth == 0: # We reached max depth or ran out of possible moves, return just the evaluation
+            return self.evaluate_state(board), None
+
+        if not moves:
             return self.evaluate_state(board), None
 
         evaluation = self.evaluate_state(board)
 
+        move = None
+        new_evaluation = evaluation
+
         for src, tgt in moves:
             if tgt.get_owner_name() != self.player_name:
-                if probability_of_successful_attack(board, src, tgt) < 0.5:
+                if probability_of_successful_attack(board, src.get_name(), tgt.get_name()) < 0.5:
                     continue
 
             new_board = deepcopy(board)
@@ -89,10 +105,9 @@ class AI:
             new_evaluation, _ = self.maxn(new_board, new_transfers, depth - 1)
 
             if new_evaluation[self.player_name - 1] > evaluation[self.player_name - 1]:
-                best_src = src.get_name()
-                best_tgt = tgt.get_name()
+                move = (src.get_name(), tgt.get_name())
 
-        return new_evaluation, (best_src, best_tgt)
+        return new_evaluation, move
 
     def simulate_move(self, board: Board, src_name: int, tgt_name: int, transfers: int) -> None:
         src = board.get_area(src_name)
@@ -115,7 +130,7 @@ class AI:
             tgt.set_owner(src.get_owner_name())
 
     def evaluate_state(self, board: Board) -> List[float]:
-        return np.random.uniform(size=4)
+        return np.random.uniform(low=0.01, size=4)
 
     def possible_transfers(self, board: Board) -> Tuple[Area, Area]:
         for area in board.get_player_areas(self.player_name): 
