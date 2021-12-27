@@ -81,11 +81,9 @@ class AI:
 
         # TODO: We have to check if the game is over when simulating, I think, or maybe not, it seems it's working like this
 
-        if depth == 0: # We reached max depth or ran out of possible moves, return just the evaluation
+        if not depth or not moves: # We reached max depth or ran out of possible moves, return just the evaluation
             return self.evaluate_state(board), None
 
-        if not moves:
-            return self.evaluate_state(board), None
 
         evaluation = self.evaluate_state(board)
 
@@ -93,6 +91,7 @@ class AI:
         new_evaluation = evaluation
 
         for src, tgt in moves:
+            # TODO - Nema smysl uvazovat transfer na policka ktere maji 8 kostek.
             if tgt.get_owner_name() != self.player_name:
                 if probability_of_successful_attack(board, src.get_name(), tgt.get_name()) < 0.5:
                     continue
@@ -130,7 +129,23 @@ class AI:
             tgt.set_owner(src.get_owner_name())
 
     def evaluate_state(self, board: Board) -> List[float]:
-        return np.random.uniform(low=0.01, size=4)
+        
+        all_dices_in_game = 0
+        tmp_all_dices = [0,0,0,0]
+        probability_of_win = [0,0,0,0]
+        for i in self.players_order:
+            tmp_board = board.get_player_areas(i)
+            
+            for all_areas in tmp_board:
+                tmp_all_dices[i] += all_areas.get_dice()
+            all_dices_in_game += tmp_all_dices[i]
+            #self.logger.debug(f"Player: {i}. Count of all dices: {tmp_all_dices[i]}")
+        
+        for i in self.players_order:
+            probability_of_win[i-1] = tmp_all_dices[i]/all_dices_in_game
+
+        #self.logger.debug(f"Probability of wins: {probability_of_win}")
+        return probability_of_win
 
     def possible_transfers(self, board: Board) -> Tuple[Area, Area]:
         for area in board.get_player_areas(self.player_name): 
