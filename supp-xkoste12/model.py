@@ -3,13 +3,48 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-INPUT_SIZE = 625
+import numpy as np
+import pickle
+
+import os
+
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+INPUT_SIZE = 637
 OUTPUT_SIZE = 4
 MODEL_PATH = r"./model.pth"
+
+DATA_PATH = r"./data"
+TRAIN_DATA_FRACTION = 0.8
 
 LR = 0.01
 EPOCHS = 16
 BATCH_SIZE = 16
+
+class GameDataSet(torch.utils.data.Dataset):
+    def __init__(self, data_dir=DATA_PATH):
+        self.data_dir = data_dir
+        self.data = list()
+
+        self.load_data()
+
+        self.train_size = int(TRAIN_DATA_FRACTION * len(self.data))
+        self.val_size = len(self.data) - self.train_size
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+    def load_data(self):
+        for file in os.listdir(self.data_dir):
+            if file.endswith(".pickle"):
+                with open(os.path.join(DATA_PATH, file), "rb") as pkl:
+                    data = pickle.load(pkl)
+                
+                self.data.extend([(np.array(state + data[1], dtype=np.dtype('float32')), \
+                                   np.array(data[0], dtype=np.dtype('float32'))) for state in data[2]])
 
 class NeuralNetwork(nn.Module):
     def __init__(self):
@@ -31,32 +66,50 @@ class NeuralNetwork(nn.Module):
         output = F.softmax(x, dim=1)
         return output
 
-def create_model():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    return NeuralNetwork().to(device)
-
-def save_model(model):
-    torch.save(model.state_dict(), MODEL_PATH)
-
 def train_model():
-    model = create_model()
+    model = NeuralNetwork().to(DEVICE)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=LR)
 
+    dataset = GameDataSet()
+    train_set, val_set = torch.utils.data.random_split(dataset, [dataset.train_size, dataset.val_size])
+
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True)
+    val_loader = torch.utils.data.DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=True)
+
+    min_valid_loss = np.inf
+
     for epoch in range(EPOCHS):
-        inputs, labels = None, None
+        train_loss = 0.0
 
-        optimizer.zero_grad()
+        for i, data in enumerate(train_loader, 0):
+            inputs, labels = data[0].to(DEVICE), data[1].to(DEVICE)
 
-        outputs = model(inputs)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
+            optimizer.zero_grad()
 
-    return model
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            train_loss = train_loss + loss.item()
+            if i % 50 == 49:
+                print(f"({epoch}, {i + 1}) : loss={train_loss / 50}")
+                train_loss = 0.0
+
+        valid_loss = 0.0
+        for inputs, labels in val_loader:
+            inputs = inputs.to(DEVICE)
+            labels = labels.to(DEVICE)
+
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            valid_loss = valid_loss + loss.item()
+
+        if valid_loss < min_valid_loss:
+            min_valid_loss = valid_loss
+            torch.save(model.state_dict(), MODEL_PATH)
 
 if __name__ == "__main__":
-    model = create_model()
-    model = train_model(model)
-    save_model(model)
+    train_model()
