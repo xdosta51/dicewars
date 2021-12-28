@@ -18,8 +18,8 @@ DATA_PATH = r"./data"
 TRAIN_DATA_FRACTION = 0.8
 
 LR = 0.01
-EPOCHS = 16
-BATCH_SIZE = 16
+EPOCHS = 50
+BATCH_SIZE = 256
 
 class GameDataSet(torch.utils.data.Dataset):
     def __init__(self, data_dir=DATA_PATH):
@@ -53,6 +53,7 @@ class NeuralNetwork(nn.Module):
         self.fc1 = nn.Linear(INPUT_SIZE, 64)
         self.dropout1 = nn.Dropout(p=0.5)
         self.fc2 = nn.Linear(64, 32)
+        self.dropout2 = nn.Dropout(p=0.5)
         self.fc3 = nn.Linear(32, OUTPUT_SIZE)
 
     def forward(self, x):
@@ -61,6 +62,7 @@ class NeuralNetwork(nn.Module):
         x = self.dropout1(x)
         x = self.fc2(x)
         x = F.relu(x)
+        x = self.dropout2(x)
         x = self.fc3(x)
 
         output = F.softmax(x, dim=1)
