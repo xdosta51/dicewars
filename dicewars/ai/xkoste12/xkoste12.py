@@ -1,15 +1,54 @@
 import logging
 import random
-
-from dicewars.client.ai_driver import BattleCommand, EndTurnCommand, TransferCommand
-from dicewars.ai.utils import possible_attacks, probability_of_successful_attack
-from dicewars.client.game.board import Board
-from dicewars.client.game.area import Area
-
 from copy import deepcopy
 from typing import List, Tuple
 
 import numpy as np
+from dicewars.ai.utils import (possible_attacks,
+                               probability_of_successful_attack)
+from dicewars.client.ai_driver import (BattleCommand, EndTurnCommand,
+                                       TransferCommand)
+from dicewars.client.game.area import Area
+from dicewars.client.game.board import Board
+
+
+def sort_by_first_and_get_second(dictionary: dict) -> list:
+    return [pair[1] for pair in sorted(dictionary.items(), key=lambda pair: pair[0])]
+
+
+def serialize_neighbourhoods(board: Board) -> List[int]:
+    areas_n = len(board.areas)
+    neighbourhood_dict = {(x + 1, y + 1): 0 for x in range(areas_n) for y in range(x + 1, areas_n)}
+    for area in board.areas.values():
+        for neighbour_name in area.get_adjacent_areas_names():
+            index = (area.name, neighbour_name)
+            if index in neighbourhood_dict:
+                neighbourhood_dict[index] = 1
+    return sort_by_first_and_get_second(neighbourhood_dict)
+
+
+def serialize_board_without_neighbours(board: Board, current_player_name: int, number_of_players: int = 4) -> List[int]:
+    owner_dict = {}
+    dice_dict = {}
+
+    for area in board.areas.values():
+        owner_dict[area.name] = area.owner_name
+        dice_dict[area.name] = area.dice
+
+    flat_owners = sort_by_first_and_get_second(owner_dict)
+    flat_dice = sort_by_first_and_get_second(dice_dict)
+
+    largest_regions = [max([len(reg) for reg in board.get_players_regions(player)], default=0)
+                       for player in range(1, number_of_players + 1)]
+
+    current_player_one_hot = [int(player == current_player_name)
+                              for player in range(1, number_of_players + 1)]
+
+    return current_player_one_hot + flat_owners + flat_dice + largest_regions
+
+
+def serialize_board_full(board: Board, current_player_name: int, number_of_players: int = 4) -> List[int]:
+    return serialize_board_without_neighbours(board, current_player_name, number_of_players) + serialize_neighbourhoods(board)
 
 
 class AI:
@@ -45,9 +84,9 @@ class AI:
         nb_turns_this_game -- number of turns ended so far (int)
         time_left -- Time left in seconds (float)
 
-        Returns:    
+        Returns:
         BattleCommand() || EndTurnCommand() || TransferCommand()
-        """ 
+        """
 
         self.logger.debug(f"It's my turn now. On turn: {nb_turns_this_game}.")
 
@@ -70,20 +109,19 @@ class AI:
     def get_best_move(self, board: Board, transfers: int) -> Tuple[int, int]:
         self.logger.debug(f"Beginning a search for a best move.")
         return self.maxn(board, transfers, self.MAXN_MAX_DEPTH)[1]
-    
+
     def maxn(self, board: Board, transfers: int, depth: int) -> Tuple[List[float], Tuple[int, int]]:
         self.logger.debug(f"Running MAX_N algorithm at depth {depth}")
         moves = list(possible_attacks(board, self.player_name))
 
         # COMMENTING THIS OUT FOR NOW, SELECTING MOVES RANDOMLY GENERATES A LOT OF TRANSFERS, WHICH IS UNSUITABLE FOR DEBUGGING
-        #if transfers < self.max_transfers: # Consider transfers only if we are still allowed to do them
+        # if transfers < self.max_transfers: # Consider transfers only if we are still allowed to do them
         #    moves = moves + list(self.possible_transfers(board))
 
         # TODO: We have to check if the game is over when simulating, I think, or maybe not, it seems it's working like this
 
-        if not depth or not moves: # We reached max depth or ran out of possible moves, return just the evaluation
+        if not depth or not moves:  # We reached max depth or ran out of possible moves, return just the evaluation
             return self.evaluate_state(board), None
-
 
         evaluation = self.evaluate_state(board)
 
@@ -112,7 +150,7 @@ class AI:
         src = board.get_area(src_name)
         tgt = board.get_area(tgt_name)
 
-        if tgt.get_owner_name() == self.player_name: # Simulating a transfer
+        if tgt.get_owner_name() == self.player_name:  # Simulating a transfer
             transfers = transfers + 1
             amount = tgt.get_dice() + src.get_dice() - 1
 
@@ -123,24 +161,23 @@ class AI:
                 tgt.set_dice(amount)
                 src.set_dice(1)
 
-        else: # Simulating an attack
+        else:  # Simulating an attack
             tgt.set_dice(src.get_dice() - 1)
             src.set_dice(1)
             tgt.set_owner(src.get_owner_name())
 
     def evaluate_state(self, board: Board) -> List[float]:
-        
         all_dices_in_game = 0
-        tmp_all_dices = [0,0,0,0]
-        probability_of_win = [0,0,0,0]
+        tmp_all_dices = [0, 0, 0, 0]
+        probability_of_win = [0, 0, 0, 0]
         for i in self.players_order:
             tmp_board = board.get_player_areas(i)
-            
+
             for all_areas in tmp_board:
                 tmp_all_dices[i] += all_areas.get_dice()
             all_dices_in_game += tmp_all_dices[i]
             #self.logger.debug(f"Player: {i}. Count of all dices: {tmp_all_dices[i]}")
-        
+
         for i in self.players_order:
             probability_of_win[i-1] = tmp_all_dices[i]/all_dices_in_game
 
@@ -148,8 +185,8 @@ class AI:
         return probability_of_win
 
     def possible_transfers(self, board: Board) -> Tuple[Area, Area]:
-        for area in board.get_player_areas(self.player_name): 
-            if not area.can_attack(): # can_attack means that area has more than one dice => can_attack <=> can_transfer
+        for area in board.get_player_areas(self.player_name):
+            if not area.can_attack():  # can_attack means that area has more than one dice => can_attack <=> can_transfer
                 continue
 
             neighbours = area.get_adjacent_areas_names()
