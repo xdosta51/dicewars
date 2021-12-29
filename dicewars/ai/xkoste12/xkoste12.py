@@ -10,7 +10,11 @@ from dicewars.client.ai_driver import (BattleCommand, EndTurnCommand,
                                        TransferCommand)
 from dicewars.client.game.area import Area
 from dicewars.client.game.board import Board
+from dicewars.supp_xkoste12.model import NeuralNetwork
 
+import torch
+
+MODEL_PATH = r"r./dicewars/supp_xkoste12/model.pth"
 
 def sort_by_first_and_get_second(dictionary: dict) -> list:
     return [pair[1] for pair in sorted(dictionary.items(), key=lambda pair: pair[0])]
@@ -71,8 +75,12 @@ class AI:
         self.max_transfers = max_transfers
         self.players_order = players_order
         self.board = board
+        
+        self.model = NeuralNetwork()
+        self.model.load_state_dict(torch.load(MODEL_PATH))
+        self.model.eval()
 
-        self.MAXN_MAX_DEPTH = 2
+        self.MAXN_MAX_DEPTH = 1
 
     def ai_turn(self, board, nb_moves_this_turn, nb_transfers_this_turn, nb_turns_this_game, time_left):
         """AI agent's turn (a single action)
@@ -107,23 +115,22 @@ class AI:
         return EndTurnCommand()
 
     def get_best_move(self, board: Board, transfers: int) -> Tuple[int, int]:
-        self.logger.debug(f"Beginning a search for a best move.")
-        return self.maxn(board, transfers, self.MAXN_MAX_DEPTH)[1]
+        eval, move = self.maxn(board, transfers, self.MAXN_MAX_DEPTH)
+        self.logger.debug(f"Found best move: eval={eval}")
+        return move
 
     def maxn(self, board: Board, transfers: int, depth: int) -> Tuple[List[float], Tuple[int, int]]:
-        self.logger.debug(f"Running MAX_N algorithm at depth {depth}")
         moves = list(possible_attacks(board, self.player_name))
 
-        # COMMENTING THIS OUT FOR NOW, SELECTING MOVES RANDOMLY GENERATES A LOT OF TRANSFERS, WHICH IS UNSUITABLE FOR DEBUGGING
-        # if transfers < self.max_transfers: # Consider transfers only if we are still allowed to do them
-        #    moves = moves + list(self.possible_transfers(board))
+        if transfers < self.max_transfers: # Consider transfers only if we are still allowed to do them
+            moves = moves + list(self.possible_transfers(board))
 
         # TODO: We have to check if the game is over when simulating, I think, or maybe not, it seems it's working like this
 
         if not depth or not moves:  # We reached max depth or ran out of possible moves, return just the evaluation
-            return self.evaluate_state(board), None
+            return self.evaluate_state_nn(board), None
 
-        evaluation = self.evaluate_state(board)
+        evaluation = self.evaluate_state_nn(board)
 
         move = None
         new_evaluation = evaluation
@@ -141,7 +148,7 @@ class AI:
 
             new_evaluation, _ = self.maxn(new_board, new_transfers, depth - 1)
 
-            if new_evaluation[self.player_name - 1] > evaluation[self.player_name - 1]:
+            if new_evaluation[self.player_name - 1] >= evaluation[self.player_name - 1]:
                 move = (src.get_name(), tgt.get_name())
 
         return new_evaluation, move
@@ -176,13 +183,17 @@ class AI:
             for all_areas in tmp_board:
                 tmp_all_dices[i] += all_areas.get_dice()
             all_dices_in_game += tmp_all_dices[i]
-            #self.logger.debug(f"Player: {i}. Count of all dices: {tmp_all_dices[i]}")
 
         for i in self.players_order:
             probability_of_win[i-1] = tmp_all_dices[i]/all_dices_in_game
 
-        #self.logger.debug(f"Probability of wins: {probability_of_win}")
         return probability_of_win
+
+    def evaluate_state_nn(self, board: Board) -> List[float]:
+        state = serialize_board_full(board, self.player_name)
+        state = torch.FloatTensor([state])
+        output = self.model(state)
+        return output.tolist()[0]
 
     def possible_transfers(self, board: Board) -> Tuple[Area, Area]:
         for area in board.get_player_areas(self.player_name):

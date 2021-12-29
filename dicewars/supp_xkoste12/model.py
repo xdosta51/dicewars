@@ -65,7 +65,7 @@ class NeuralNetwork(nn.Module):
         x = self.dropout2(x)
         x = self.fc3(x)
 
-        output = F.softmax(x, dim=1)
+        output = F.softmax(x)
         return output
 
 def train_model():
