@@ -10,6 +10,7 @@ import os
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+
 INPUT_SIZE = 637
 OUTPUT_SIZE = 4
 MODEL_PATH = r"./model.pth"
@@ -18,7 +19,7 @@ DATA_PATH = r"./data"
 TRAIN_DATA_FRACTION = 0.8
 
 LR = 0.01
-EPOCHS = 50
+EPOCHS = 1000
 BATCH_SIZE = 256
 
 class GameDataSet(torch.utils.data.Dataset):
@@ -41,7 +42,12 @@ class GameDataSet(torch.utils.data.Dataset):
         for file in os.listdir(self.data_dir):
             if file.endswith(".pickle"):
                 with open(os.path.join(DATA_PATH, file), "rb") as pkl:
-                    data = pickle.load(pkl)
+                    try:
+                        data = pickle.load(pkl)
+                    except:
+                        print("bad")
+                        continue
+                        
                 
                 self.data.extend([(np.array(state + data[1], dtype=np.dtype('float32')), \
                                    np.array(data[0], dtype=np.dtype('float32'))) for state in data[2]])
@@ -65,8 +71,7 @@ class NeuralNetwork(nn.Module):
         x = self.dropout2(x)
         x = self.fc3(x)
 
-        output = F.softmax(x)
-        return output
+        return x
 
 def train_model():
     model = NeuralNetwork().to(DEVICE)
@@ -112,6 +117,7 @@ def train_model():
         if valid_loss < min_valid_loss:
             min_valid_loss = valid_loss
             torch.save(model.state_dict(), MODEL_PATH)
+            print("saving model")
 
 if __name__ == "__main__":
     train_model()
