@@ -11,7 +11,7 @@ from dicewars.client.ai_driver import (BattleCommand, EndTurnCommand,
 from dicewars.client.game.area import Area
 from dicewars.client.game.board import Board
 from dicewars.supp_xkoste12.model import NeuralNetwork
-from dicewars.ai.utils import possible_attacks, probability_of_successful_attack, probability_of_holding_area
+
 import torch
 
 MODEL_PATH = r"./dicewars/supp_xkoste12/model.pth"
