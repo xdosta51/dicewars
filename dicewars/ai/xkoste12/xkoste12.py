@@ -11,10 +11,10 @@ from dicewars.client.ai_driver import (BattleCommand, EndTurnCommand,
 from dicewars.client.game.area import Area
 from dicewars.client.game.board import Board
 from dicewars.supp_xkoste12.model import NeuralNetwork
-
+from dicewars.ai.utils import possible_attacks, probability_of_successful_attack, probability_of_holding_area
 import torch
 
-MODEL_PATH = r"r./dicewars/supp_xkoste12/model.pth"
+MODEL_PATH = r"./dicewars/supp_xkoste12/model.pth"
 
 def sort_by_first_and_get_second(dictionary: dict) -> list:
     return [pair[1] for pair in sorted(dictionary.items(), key=lambda pair: pair[0])]
@@ -96,6 +96,15 @@ class AI:
         BattleCommand() || EndTurnCommand() || TransferCommand()
         """
 
+        if time_left > 10.0:
+            self.MAXN_MAX_DEPTH = 3
+        elif time_left >= 2.0:
+            self.MAXN_MAX_DEPTH = 2
+        else:
+            self.MAXN_MAX_DEPTH = 1
+
+        self.logger.debug(f"Time Left: {time_left}.")
+
         self.logger.debug(f"It's my turn now. On turn: {nb_turns_this_game}.")
 
         self.board = board
@@ -148,7 +157,7 @@ class AI:
 
             new_evaluation, _ = self.maxn(new_board, new_transfers, depth - 1)
 
-            if new_evaluation[self.player_name - 1] >= evaluation[self.player_name - 1]:
+            if new_evaluation[self.player_name - 1] > evaluation[self.player_name - 1] or new_evaluation[self.player_name - 1] == 1:
                 move = (src.get_name(), tgt.get_name())
 
         return new_evaluation, move
@@ -181,11 +190,11 @@ class AI:
             tmp_board = board.get_player_areas(i)
 
             for all_areas in tmp_board:
-                tmp_all_dices[i] += all_areas.get_dice()
-            all_dices_in_game += tmp_all_dices[i]
+                tmp_all_dices[i-1] += all_areas.get_dice()
+            all_dices_in_game += tmp_all_dices[i-1]
 
         for i in self.players_order:
-            probability_of_win[i-1] = tmp_all_dices[i]/all_dices_in_game
+            probability_of_win[i-1] = tmp_all_dices[i-1]/all_dices_in_game
 
         return probability_of_win
 
