@@ -188,11 +188,12 @@ class TournamentCombatantsProvider:
         least_playing = sorted(per_player_count, key=lambda p: per_player_count[p])[0]
         pivot_ind = self.players.index(least_playing)
 
-        if self.game_numbers[pivot_ind][pivot_ind] == 0:
-            rare_opponent_ind = (pivot_ind + 1) % len(self.players)
-        else:
-            rare_opponent_ind = np.argmin(self.game_numbers[pivot_ind])
-        assert(rare_opponent_ind != pivot_ind)
+        rare_opponent_ind = np.argmin(self.game_numbers[pivot_ind])
+
+        # When the pivot player went through all the games with the same players,
+        # there'd be none to have lower number of mutual games
+        if rare_opponent_ind == pivot_ind:
+            rare_opponent_ind = (rare_opponent_ind + 1) % len(self.players)
 
         possible_competitors = [self.players.index(ai) for ai in self.players if self.players.index(ai) not in [pivot_ind, rare_opponent_ind]]
         random.shuffle(possible_competitors)
